@@ -31,10 +31,27 @@ const prepare = config => {
 };
 
 export const _createConfig = cacheDir => (settings, rawParentConfig) => {
-  const { hash, filename = [] } = settings;
+  const { hash, filename = [], libraryTarget = undefined } = settings;
   const outputPath = path.join(cacheDir, hash);
 
   const parentConfig = mapParentConfig(settings, prepare(rawParentConfig));
+
+  let dllExportNamePre = '';
+  let outputParams = {};
+  // 判断是否有设置一个暴露出的全局变量
+  /**
+   * libraryTarget == ”global“的时候存在一个问题，生成的dll文件是 window.vendor_hash = function(){}
+   * 正确应该是要生成 global.vendor_hash = function(){}
+   * 根据我的尝试 只要再设置一个 globalObject 就可以正确生成文件
+   * 另外 为了要适配小程序的使用，我在mainifest.json文件中 设置了变量名为 global.[name]_[hash]
+   */
+  if (libraryTarget == 'global') {
+    dllExportNamePre = libraryTarget + '.';
+    outputParams = {
+      globalObject: libraryTarget, //全局对象配置
+      libraryTarget,
+    };
+  }
 
   const ownConfig = {
     context: settings.context,
@@ -43,12 +60,14 @@ export const _createConfig = cacheDir => (settings, rawParentConfig) => {
       ...(settings.plugins || []),
       new DllPlugin({
         path: path.join(outputPath, '[name].manifest.json'),
-        name: '[name]_[chunkhash]',
+        name: dllExportNamePre + '[name]_[chunkhash]',
       }),
     ],
     output: {
       filename: filename,
       library: '[name]_[chunkhash]',
+      // ...outputParams,
+      ...outputParams,
     },
   };
 
